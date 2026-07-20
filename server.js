@@ -22,6 +22,7 @@ const ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 const DAILY_CALL_CAP  = +(process.env.DAILY_CALL_CAP  || 400);
 const DAILY_TOKEN_CAP = +(process.env.DAILY_TOKEN_CAP || 250000);
 const PORT = process.env.PORT || 10000;
+const DG_KEY = process.env.DEEPGRAM_API_KEY || "";
 
 /* Feature -> model, per provider. Live features ride the fast tier; judgment features ride the strong tier. */
 const MODELS = {
@@ -41,7 +42,23 @@ const day = () => new Date().toISOString().slice(0, 10);
 const meters = new Map(), recent = new Map(), lastCopilot = new Map();
 const meter = ip => { const k = ip + "|" + day(); if (!meters.has(k)) meters.set(k, { calls: 0, toks: 0 }); return meters.get(k); };
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, models: MODELS[PROVIDER] }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, provider: PROVIDER, models: MODELS[PROVIDER], stt: DG_KEY ? "deepgram" : "none" }));
+
+/* Speech ear: mint a 30-second Deepgram token so the browser can stream
+   straight to wss://api.deepgram.com without the real key ever leaving here. */
+app.get("/api/stt-token", async (_req, res) => {
+  if (!DG_KEY) return res.json({ ok: false, error: "NO_DEEPGRAM" });
+  try {
+    const r = await fetch("https://api.deepgram.com/v1/auth/grant", {
+      method: "POST",
+      headers: { Authorization: "Token " + DG_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ ttl_seconds: 30 })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.access_token) return res.json({ ok: false, error: "DG_GRANT_" + r.status });
+    res.json({ ok: true, token: j.access_token, ttl: j.expires_in || 30 });
+  } catch (e) { res.json({ ok: false, error: "DG_ERR" }); }
+});
 
 app.post("/api/ai", async (req, res) => {
   const ip = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").toString().split(",")[0].trim();

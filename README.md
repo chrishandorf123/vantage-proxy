@@ -22,3 +22,7 @@ Each call logs one JSON line in the Render logs: feature, model, input/output to
 ## Notes
 - Free Render instances sleep when idle; the first call after a quiet stretch takes 30 to 60 seconds. Move to the paid instance before reps dial live.
 - Budgets are in-memory (reset on restart). Good enough pre-accounts; they move to the database in Phase 2.
+
+
+## Optional: Deepgram speech ear
+Set `DEEPGRAM_API_KEY` (create the key in the Deepgram console with **Member** permissions) and the proxy exposes `/api/stt-token`, which mints 30-second streaming tokens for the app's DEEPGRAM ear. Without it, the app's browser speech engine keeps working as before.
