@@ -51,13 +51,18 @@ app.get("/api/stt-token", async (_req, res) => {
   try {
     const r = await fetch("https://api.deepgram.com/v1/auth/grant", {
       method: "POST",
-      headers: { Authorization: "Token " + DG_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ ttl_seconds: 30 })
+      headers: { Authorization: "Token " + DG_KEY.trim(), "Content-Type": "application/json" }
+      // no body: /v1/auth/grant defaults to a 30s TTL; some deployments 400 on an unexpected body
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.access_token) return res.json({ ok: false, error: "DG_GRANT_" + r.status });
+    const raw = await r.text();
+    let j = {};
+    try { j = JSON.parse(raw); } catch (e) {}
+    if (!r.ok || !j.access_token) {
+      console.error("DG grant failed", r.status, raw.slice(0, 300));
+      return res.json({ ok: false, error: "DG_GRANT_" + r.status, detail: raw.slice(0, 300) });
+    }
     res.json({ ok: true, token: j.access_token, ttl: j.expires_in || 30 });
-  } catch (e) { res.json({ ok: false, error: "DG_ERR" }); }
+  } catch (e) { res.json({ ok: false, error: "DG_ERR", detail: String(e).slice(0,200) }); }
 });
 
 app.post("/api/ai", async (req, res) => {
